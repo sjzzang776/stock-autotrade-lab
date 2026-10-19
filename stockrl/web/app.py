@@ -36,7 +36,7 @@ tpl.env.filters["num"] = _fmt(lambda v: f"{v:.2f}")
 security = HTTPBasic()
 
 MARKETS = {
-    "kr": {"name": "한국주식", "status": "모의투자 운용 중", "broker": "한국투자증권 (모의)", "bench": "KOSPI200"},
+    "kr": {"name": "한국주식", "status": "실전 시작 전", "broker": "한국투자증권", "bench": "KOSPI200"},
     "us": {"name": "미국주식", "status": "데이터 수집 중", "broker": "한국투자증권 해외주식 (예정)", "bench": "S&P500 · 나스닥100"},
     "crypto": {"name": "암호화폐", "status": "데이터 수집 중", "broker": "바이낸스 (예정)", "bench": "BTC 보유 · 시총 상위 바스켓"},
 }
@@ -84,7 +84,7 @@ import time
 # e2-micro 는 디스크가 느리고 메모리가 작아 매 요청마다 DB 를 다시 읽으면 수십 초(2026-10-19 실측 `/` 37초)
 # → 백그라운드에서 1분마다 미리 읽어 메모리에 두고, 화면은 그걸 바로 보여 준다 (최대 1분 늦음)
 _CACHE = {}
-_JOBS = {"paper": data.paper, "live": data.live, "alerts": data.alerts, "us": lambda: data.glob_status("us"),
+_JOBS = {"paper": data.paper, "live": data.live, "alerts": data.alerts, "kr": data.kr_status, "us": lambda: data.glob_status("us"),
          "crypto": lambda: data.glob_status("crypto")}
 
 
@@ -128,8 +128,10 @@ def overview(request: Request, _=Depends(auth)):
 def market(request: Request, m: str, _=Depends(auth)):
     if m not in MARKETS:
         raise HTTPException(404)
-    return page(request, "market.html", active=m, m=m, info=MARKETS[m], p=cached("paper") if m == "kr" else None, live=cached("live") if m == "kr" else None,
-                g=None if m == "kr" else cached(m))
+    # 시장 페이지 = 실전 계좌 + 시장 데이터. 모의투자 내용은 /paper 에만 (2026-10-20 사용자 지적: 한국주식에 모의가 섞임)
+    heat = (cached("paper").get("targets") or {}).get("heat") if m == "kr" else None
+    return page(request, "market.html", active=m, m=m, info=MARKETS[m], g=cached(m), heat=heat,
+                heat_asof=(cached("paper").get("targets") or {}).get("asof") if m == "kr" else None)
 
 
 @app.get("/paper", response_class=HTMLResponse)

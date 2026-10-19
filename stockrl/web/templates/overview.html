@@ -64,11 +64,11 @@
 <h2 style="margin-top:8px">시장별 모의투자</h2>
 <div class="grid">
   {% for k, m in markets.items() %}
-  <a class="card" href="/market/{{ k }}" style="color:inherit">
+  <a class="card" href="{{ '/paper' if k == 'kr' else '/market/' ~ k }}" style="color:inherit">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <strong style="font-size:18px">{{ m.name }}</strong>
-      <span class="badge {{ 'live' if k == 'kr' else 'wait' }}">{{ m.status }}</span></div>
-    <div class="muted" style="margin-top:8px;font-size:15px">{{ m.broker }}<br>비교 기준: {{ m.bench }}</div>
+      <span class="badge {{ 'live' if k == 'kr' else 'wait' }}">{{ '모의투자 운용 중' if k == 'kr' else '데이터 수집 중' }}</span></div>
+    <div class="muted" style="margin-top:8px;font-size:15px">{{ '한국투자증권 모의계좌' if k == 'kr' else '모의투자 준비 중' }}<br>비교 기준: {{ m.bench }}</div>
     {% if k == 'kr' %}<div style="margin-top:10px;font-size:22px;font-weight:800">{{ (live.total if live else p.value) | won }}</div>{% endif %}
   </a>
   {% endfor %}

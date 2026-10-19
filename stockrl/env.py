@@ -8,6 +8,7 @@ import numpy as np
 from gymnasium import spaces
 
 from .tda import heat_to_scale
+from .weights import capped_weights
 
 POS_FEATS = 3  # 현재 비중, 미실현 손익률, 보유일수/252
 
@@ -40,10 +41,30 @@ class Panel:
         return int(idx[0]), int(idx[-1])
 
 
+def attach_marcap(panel, raw_dir="data/raw"):
+    """시가총액 (T × N) 을 패널에 붙임 — data/raw/marcap/<종목>.parquet. 시총 기준 + 기울이기(base=cap) 모드용"""
+    if getattr(panel, "MC", None) is not None:
+        return panel.MC
+    import pandas as pd
+    from .common import rpath
+    dates = pd.to_datetime(panel.dates)
+    mc = np.full((panel.T, panel.N), np.nan)
+    for n, t in enumerate(panel.tickers):
+        f = rpath(f"{raw_dir}/marcap/{t}.parquet")
+        if f.exists():
+            s = pd.read_parquet(f, columns=["시가총액"])["시가총액"]
+            s.index = pd.to_datetime(s.index)
+            mc[:, n] = s.reindex(dates).ffill().to_numpy()
+    panel.MC = mc
+    return mc
+
+
 def make_env(panel, cfg, start, end, **kw):
     """전체 설정(cfg)에서 환경 생성: env 설정 + 섹터 과열 파라미터 + 시장/종목 관측 길이"""
     ecfg = {**cfg["env"], "heat_threshold": cfg["tda"]["sector"]["threshold"],
             "heat_max_reduction": cfg["tda"]["sector"]["max_reduction"]}
+    if ecfg.get("base") == "cap":
+        attach_marcap(panel, cfg.get("data", {}).get("raw_dir", "data/raw"))
     f = cfg["features"]
     return TradingEnv(panel, ecfg, start, end, f["lookback"], stock_lookback=f.get("stock_lookback"), **kw)
 

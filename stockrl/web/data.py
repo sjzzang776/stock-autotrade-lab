@@ -150,6 +150,38 @@ def live():
             "holdings": hold}
 
 
+def kr_status():
+    """한국주식 시장 데이터 수집 현황 — 뉴스(감성 채점)·장중 분봉·긴급 뉴스 신호 (news.db·minute.db, 읽기 전용)"""
+    out = {"rows": [], "top": [], "news": [], "filings": [], "tz": "KST"}
+    nm = names()
+    con = _ro(NEWS)
+    if con is not None:
+        try:
+            n, nt, lo, hi = con.execute("SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(dt), MAX(dt) FROM news").fetchone()
+            sc = con.execute("SELECT COUNT(*) FROM news WHERE score IS NOT NULL").fetchone()[0]
+            out["rows"].append(("종목 뉴스 (네이버 금융)", f"{nt}종목 · {n:,}건", f"{lo[:10]} ~ {hi[:16].replace('T', ' ')}"))
+            out["rows"].append(("감성 점수 (KR-FinBERT)", f"{sc:,}건", "종목과 관련 있는 기사만 채점"))
+            a = con.execute("SELECT COUNT(*), MAX(alert_at) FROM alerts").fetchone()
+            out["rows"].append(("긴급 뉴스 신호", f"{a[0]:,}건", f"최근 {(a[1] or '')[:16].replace('T', ' ')}"))
+            for dt, office, t, title, url, score in con.execute(
+                    "SELECT dt, office, ticker, title, url, score FROM news WHERE relevance > 0 ORDER BY dt DESC LIMIT 15"):
+                tag = "" if score is None else (" · 긍정" if score > 0.3 else " · 부정" if score < -0.3 else " · 중립")
+                out["news"].append({"dt": dt, "source": f"{office}{tag}", "symbol": nm.get(t, t), "title": title, "url": url})
+        except Exception as e:
+            out["rows"].append(("뉴스 DB", "읽기 실패", str(e)[:60]))
+    m = _ro(Path.home() / "work" / "stock-news" / "minute.db")
+    if m is not None:
+        try:
+            k, n, lo, hi = m.execute("SELECT COUNT(DISTINCT ticker), COUNT(*), MIN(ts), MAX(ts) FROM minute").fetchone()
+            f = lambda x: f"{x[:4]}-{x[4:6]}-{x[6:8]} {x[8:10]}:{x[10:12]}" if x else ""
+            out["rows"].append(("장중 1분봉 (매일 쌓음)", f"{k}종목 · {n:,}행", f"{f(lo)} ~ {f(hi)}"))
+        except Exception:
+            pass
+    out["rows"].append(("일봉·수급·공시(DART)", "학습용 데이터", "2011 ~ (노트북·학습 서버에 보관)"))
+    out["top"] = list(nm.values())[:30]
+    return out
+
+
 def glob_status(market):
     """미국·암호화폐 수집 현황 (stockrl.glob.collect → global.db)"""
     con = _ro(DB_DIR / "global.db")

@@ -1,53 +1,48 @@
 {% extends "base.html" %}
 {% block title %}{{ info.name }}{% endblock %}
 {% block body %}
-<h1>{{ info.name }} <span class="badge {{ 'live' if m == 'kr' else 'wait' }}">{{ info.status }}</span></h1>
+{# 시장 페이지 = 그 시장의 실전 계좌 + 시장 데이터. 모의투자는 /paper 에서만 (2026-10-20) #}
+<h1>{{ info.name }} <span class="badge wait">{{ info.status }}</span></h1>
 <p class="sub">{{ info.broker }} · 비교 기준 {{ info.bench }}</p>
 
-{% if m == 'kr' %}
-{% set show_holdings = "open" %}{% include "_live.html" %}
-<div class="grid">
-  <div class="card kpi"><div class="label">평가금액</div><div class="val">{{ p.value | won if p.value else '—' }}</div>
-    <div class="note">현금 {{ p.cash | won if p.cash is not none else '—' }}</div></div>
-  <div class="card kpi"><div class="label">누적 수익률</div>
-    <div class="val {{ 'up' if (p.ret or 0) > 0 else 'down' if (p.ret or 0) < 0 }}">{{ p.ret | pct if p.ret is not none else '—' }}</div>
-    <div class="note">KOSPI200 {{ p.bench_ret | pct if p.bench_ret is not none else '—' }}</div></div>
-  <div class="card kpi"><div class="label">보유 종목</div><div class="val">{{ p.positions | length if p.positions else 0 }}</div>
-    <div class="note">마지막 마감 기록 기준</div></div>
+<div class="card">
+  <h2>실전 계좌</h2>
+  <div class="grid">
+    <div class="kpi"><div class="label">평가금액</div><div class="val">—</div><div class="note">실전 시작 전</div></div>
+    <div class="kpi"><div class="label">누적 수익률</div><div class="val">—</div><div class="note">{{ info.bench }} 대비 —</div></div>
+    <div class="kpi"><div class="label">보유 종목</div><div class="val">0</div><div class="note">—</div></div>
+  </div>
+  <p class="muted" style="font-size:15px;margin:10px 0 0">
+    {% if m == 'kr' %}실전 투자는 모의투자로 충분히 검증한 뒤 시작합니다. 지금 운용 중인 한국주식 모의투자 결과는 <a href="/paper">모의투자 페이지</a>에서 볼 수 있습니다.
+    {% else %}이 시장은 데이터 수집 단계입니다. 전략을 검증한 뒤 모의 → 실전 순서로 시작합니다.{% endif %}</p>
 </div>
 
-<div class="card"><h2>보유 종목</h2>
-{% if p.positions %}<div class="scroll"><table>
-  <tr><th class="l">종목</th><th>수량</th><th>평균단가</th><th>종가</th><th>평가금액</th><th>비중</th><th>손익률</th></tr>
-  {% for r in p.positions %}<tr><td class="l">{{ r.name }} <span class="muted">{{ r.ticker }}</span></td>
-    <td>{{ '{:,}'.format(r.qty) }}</td><td>{{ r.avg_cost | won }}</td><td>{{ r.close | won }}</td><td>{{ r.value | won }}</td>
-    <td>{{ r.weight | pct }}</td><td class="{{ 'up' if (r.pnl or 0) > 0 else 'down' if (r.pnl or 0) < 0 }}">{{ r.pnl | pct if r.pnl is not none else '—' }}</td></tr>{% endfor %}
-</table></div>
-{% else %}<div class="empty">아직 마감 기록이 없습니다. 오늘 체결분은 장 마감 후(15:40) 반영됩니다.</div>{% endif %}
+{% if m == 'kr' and heat %}
+<div class="card"><h2>섹터 과열점수 <span class="muted" style="font-size:15px;font-weight:400">{{ heat_asof }} 종가 기준</span></h2>
+  <div class="scroll"><table><tr><th class="l">섹터</th><th>과열점수</th><th class="l">상태</th></tr>
+  {% for s, h in heat.items() %}<tr><td class="l">{{ s }}</td><td>{{ h }}</td>
+    <td class="l">{% if h >= 0.65 %}<span class="badge wait">과열</span>{% else %}<span class="muted">보통</span>{% endif %}</td></tr>{% endfor %}</table></div>
+  <p class="muted" style="font-size:15px">섹터 구성 종목들의 50일 가격 움직임 모양(지속 호몰로지)이 지난 1년 중 얼마나 큰 편인지(0~1). 0.65 이상이면 과열로 봅니다.</p>
 </div>
+{% endif %}
 
-{% if p.targets %}<div class="card"><h2>오늘 장기몫 목표 비중 ({{ p.targets.date }}, {{ p.targets.asof }} 종가 기준)</h2>
-<div class="scroll"><table><tr><th class="l">종목</th><th>목표 비중</th></tr>
-{% for r in p.targets.weights[:15] %}<tr><td class="l">{{ r.name }} <span class="muted">{{ r.ticker }}</span></td><td>{{ r.w | pct }}</td></tr>{% endfor %}
-</table></div><p class="muted" style="font-size:15px">상위 15종목. 장기몫 = 계좌의 90%.</p></div>{% endif %}
-
-{% else %}
-<div class="card prose"><h2>준비 중</h2>
+{% if m != 'kr' %}
+<div class="card prose"><h2>계획</h2>
   {% if m == 'us' %}
-  <ul><li>데이터 수집부터 시작 (일봉·분봉, SEC 공시, 영문 뉴스 감성)</li>
-      <li>롱 + 숏, 레버리지 검토 (한국투자증권 해외주식 가능 범위 확인 필요 — 안 되면 인버스·레버리지 ETF)</li>
+  <ul><li>데이터 수집 중: 일봉·분봉, SEC 공시, 영문 뉴스 → 다음은 영문 뉴스 감성 분석</li>
+      <li>숏·레버리지: 개인은 해외주식 공매도가 안 돼서 인버스 ETF(사전교육 필요) → 해외선물 순서로 검토</li>
       <li>평가 기준: S&amp;P500 · 나스닥100 대비</li>
-      <li>소액 몫은 판단 API(jev·laya)에 가공 데이터를 넘겨 판단</li></ul>
+      <li>아주 작은 몫은 판단 API(jev·laya)에 가공 데이터를 넘겨 판단</li></ul>
   {% else %}
-  <ul><li>바이낸스 현물·무기한 선물 시세, 펀딩비, 미결제약정 수집부터</li>
-      <li>롱 + 숏, 레버리지(상한 2~3배부터), 청산가격 감시·하루 손실 한도</li>
+  <ul><li>데이터 수집 중: 바이낸스 현물 일봉·1분봉, 무기한 선물 펀딩비·미결제약정, 영문 뉴스</li>
+      <li>바이낸스는 한국 거주자 실거래 제한 위험이 있어, 우선 이 데이터로 전략을 검증하고 거래 방법은 따로 정합니다</li>
       <li>수수료가 낮아 한국주식보다 단타 가능성이 높을 수 있음 → 비용 반영 백테스트로 먼저 확인</li>
       <li>평가 기준: BTC 보유 · 시총 상위 바스켓 대비</li></ul>
-  {% endif %}
-  <p class="muted">매매가 구현되면 이 페이지에 계좌·포지션·성과가 표시됩니다.</p></div>
+  {% endif %}</div>
+{% endif %}
 
-<div class="card"><h2>데이터 수집 현황 (2026-10-19 시작)</h2>
-{% if g %}<div class="scroll"><table><tr><th class="l">항목</th><th>쌓인 양</th><th class="l">범위</th></tr>
+<div class="card"><h2>데이터 수집 현황</h2>
+{% if g and g.rows %}<div class="scroll"><table><tr><th class="l">항목</th><th>쌓인 양</th><th class="l">범위</th></tr>
 {% for a, b, c in g.rows %}<tr><td class="l">{{ a }}</td><td>{{ b }}</td><td class="l muted">{{ c }}</td></tr>{% endfor %}</table></div>
 {% if g.top %}<p class="muted" style="font-size:15px">대상: {{ g.top | join(', ') }}</p>{% endif %}
 {% else %}<div class="empty">수집 DB 가 아직 없습니다.</div>{% endif %}</div>
@@ -60,6 +55,5 @@
 {% if g and g.news %}<div class="card"><h2>최근 뉴스</h2><div class="scroll"><table>
 {% for n in g.news %}<tr><td class="l muted">{{ n.dt[5:16] | replace('T', ' ') }}</td><td class="l muted">{{ n.source }}{{ ' · ' ~ n.symbol if n.symbol }}</td>
 <td class="l" style="white-space:normal"><a href="{{ n.url }}" target="_blank" rel="noopener">{{ n.title }}</a></td></tr>{% endfor %}</table></div>
-<p class="muted" style="font-size:15px">시각은 UTC. 감성 분석(영문 FinBERT)은 다음 단계.</p></div>{% endif %}
-{% endif %}
+<p class="muted" style="font-size:15px">시각은 {{ 'KST(한국 시간)' if g.tz == 'KST' else 'UTC' }}.{% if m != 'kr' %} 감성 분석(영문 FinBERT)은 다음 단계.{% endif %}</p></div>{% endif %}
 {% endblock %}
