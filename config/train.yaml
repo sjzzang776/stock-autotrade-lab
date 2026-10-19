@@ -1,0 +1,31 @@
+# 공개본 설정 — 백테스트 시뮬레이터에 필요한 값만 (학습 설정은 비공개)
+data:
+  start: '2011-01-01'
+  end: '2026-09-30'
+  universe_size: 30
+  raw_dir: data/raw
+  processed: data/processed/panel.npz
+features:
+  lookback: 60
+  stock_lookback: 16
+tda:
+  sector:
+    min_members: 4
+    rank_window: 252
+    threshold: 0.65
+    max_reduction: 0.5
+env:
+  initial_cash: 100000000
+  episode_len: 252
+  stop_value_ratio: 0.5
+  max_weight: 0.1
+  no_trade_band: 0.01
+  band_on_entry: false
+  fee: 0.00015
+  sell_tax: 0.002
+  slippage: 0.0005
+  limit_pct: 0.295
+  fixed_cash: null
+  lambda_dd: 0.0
+  lambda_to: 0.0
+output_dir: outputs

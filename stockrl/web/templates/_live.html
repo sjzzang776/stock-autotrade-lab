@@ -1,0 +1,41 @@
+{# 장중 실시간 — 5분마다 계좌 스냅샷 (paper.py snapshot). live = data.live() #}
+{% if live %}
+<div class="card">
+  <h2>실시간 <span class="badge live">{{ live.day }} {{ live.ts }} 기준 · 5분마다 갱신</span></h2>
+  <div class="grid">
+    <div class="kpi"><div class="label">지금 평가금액</div><div class="val">{{ live.total | won }}</div>
+      <div class="note">현금 {{ live.cash | won }}</div></div>
+    <div class="kpi"><div class="label">오늘 손익 (전일 마감 대비)</div>
+      <div class="val {{ 'up' if live.day_ret > 0 else 'down' if live.day_ret < 0 }}">{{ live.day_ret | pct }}</div>
+      <div class="note">{{ (live.total - live.base_value) | won }}</div></div>
+    <div class="kpi"><div class="label">KOSPI200 오늘</div>
+      <div class="val {{ 'up' if (live.k200_ret or 0) > 0 else 'down' if (live.k200_ret or 0) < 0 }}">{{ live.k200_ret | pct }}</div>
+      <div class="note">지수 {{ live.k200 | num }}</div></div>
+    <div class="kpi"><div class="label">시장 대비 (오늘)</div>
+      <div class="val">{{ (live.day_ret - live.k200_ret) | pct if live.k200_ret is not none else '—' }}</div>
+      <div class="note">보유 {{ live.holdings | length }}종목</div></div>
+  </div>
+  {% if live.series | length >= 2 %}<div class="chart" style="height:300px;margin-top:12px"><canvas id="livechart"></canvas></div>
+  {% else %}<p class="muted" style="font-size:15px">기록이 2개 이상 쌓이면(10분 후) 그래프가 나옵니다.</p>{% endif %}
+  {% if show_holdings %}
+  <details style="margin-top:10px" {{ 'open' if show_holdings == 'open' }}><summary class="muted">실시간 보유 종목 ({{ live.holdings | length }})</summary>
+  <div class="scroll"><table><tr><th class="l">종목</th><th>수량</th><th>평균단가</th><th>현재가</th><th>평가금액</th><th>비중</th><th>손익률</th></tr>
+  {% for h in live.holdings %}<tr><td class="l">{{ h.name }} <span class="muted">{{ h.ticker }}</span></td><td>{{ '{:,}'.format(h.qty) }}</td>
+    <td>{{ h.avg | won }}</td><td>{{ h.price | won }}</td><td>{{ h.value | won }}</td><td>{{ h.weight | pct }}</td>
+    <td class="{{ 'up' if (h.pnl or 0) > 0 else 'down' if (h.pnl or 0) < 0 }}">{{ h.pnl | pct }}</td></tr>{% endfor %}</table></div></details>
+  {% endif %}
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const s = {{ live.series | tojson }};
+  const el = document.getElementById('livechart');
+  if (el && s.length >= 2) {
+    const ch = lineChart(el, s.map(r => r.t), [
+      { label: '모의 계좌 (전일 마감 대비 %)', data: s.map(r => +(r.ret * 100).toFixed(3)), color: '--accent' },
+      { label: 'KOSPI200 (%)', data: s.map(r => r.k == null ? null : +(r.k * 100).toFixed(3)), color: '--muted', dash: [5, 4], width: 1.5 }]);
+    ch.options.scales.y.ticks.callback = v => v + '%'; ch.update();
+  }
+  setTimeout(() => location.reload(), 300000);   // 5분마다 새로고침
+});
+</script>
+{% endif %}

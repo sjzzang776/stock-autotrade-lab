@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}모의투자{% endblock %}
+{% block body %}
+<h1>모의투자 결과 현황</h1>
+<p class="sub">한국투자증권 모의계좌 · 2026-10-19 시작 · 장기몫 90% (시가총액 가중, 종목당 ≤30%) + 긴급 뉴스 몫 10% · {{ p.now }} 기준</p>
+
+{% set show_holdings = "open" %}{% include "_live.html" %}
+<div class="grid">
+  <div class="card kpi"><div class="label">평가금액</div><div class="val">{{ p.value | won if p.value else '—' }}</div>
+    <div class="note">시작 {{ p.start_value | won if p.start_value else '1억원' }}</div></div>
+  <div class="card kpi"><div class="label">누적 수익률 / KOSPI200</div>
+    <div class="val {{ 'up' if (p.ret or 0) > 0 else 'down' if (p.ret or 0) < 0 }}">{{ p.ret | pct if p.ret is not none else '—' }}</div>
+    <div class="note">KOSPI200 {{ p.bench_ret | pct if p.bench_ret is not none else '—' }}</div></div>
+  <div class="card kpi"><div class="label">최대 낙폭 (MDD)</div><div class="val">{{ p.metrics.mdd | pct if p.metrics else '—' }}</div>
+    <div class="note">MDD 비율(시장 대비) {{ p.relative.mdd_ratio | num if p.relative and p.relative.mdd_ratio is not none else '—' }}</div></div>
+  <div class="card kpi"><div class="label">베타 · 정보비율</div>
+    <div class="val">{{ p.relative.beta | num if p.relative and p.relative.beta is not none else '—' }} · {{ p.relative.info_ratio | num if p.relative and p.relative.info_ratio is not none else '—' }}</div>
+    <div class="note">상승 포착 {{ p.relative.up_capture | num if p.relative and p.relative.up_capture is not none else '—' }} / 하락 손실 {{ p.relative.down_capture | num if p.relative and p.relative.down_capture is not none else '—' }}</div></div>
+</div>
+
+<div class="card"><h2>자산 추이 vs KOSPI200</h2>
+  {% if p.equity and p.equity|length >= 2 %}<div class="chart"><canvas id="eq"></canvas></div>
+  {% else %}<div class="empty">마감 기록이 2일 이상 쌓이면 그래프가 나옵니다. (매일 15:40 기록)</div>{% endif %}</div>
+
+<div class="card"><h2>몫별 보유 (내부 장부)</h2>
+{% if p.sleeves %}<div class="scroll"><table><tr><th class="l">몫</th><th class="l">종목</th><th>수량</th><th>평균단가</th><th>진입일</th></tr>
+{% for r in p.sleeves %}<tr><td class="l">{{ '장기' if r.sleeve == 'core' else '긴급' }}</td><td class="l">{{ r.name }} <span class="muted">{{ r.ticker }}</span></td>
+  <td>{{ '{:,}'.format(r.qty) }}</td><td>{{ r.avg_cost | won }}</td><td>{{ r.opened }}</td></tr>{% endfor %}</table></div>
+{% else %}<div class="empty">체결 반영 전입니다 (장 마감 후 동기화).</div>{% endif %}</div>
+
+<div class="card"><h2>주문 기록 (최근 120건)</h2>
+{% if p.orders %}<div class="scroll"><table><tr><th class="l">시각</th><th class="l">몫</th><th class="l">종목</th><th>구분</th><th>수량</th><th>기준가</th><th class="l">상태</th><th class="l">사유</th></tr>
+{% for o in p.orders %}<tr><td class="l">{{ o.ts[5:16] | replace('T', ' ') }}</td><td class="l">{{ '장기' if o.source == 'core' else '긴급' if o.source == 'alert' else o.source }}</td>
+  <td class="l">{{ o.name }} <span class="muted">{{ o.ticker }}</span></td><td class="{{ 'up' if o.side == 'buy' else 'down' }}">{{ '매수' if o.side == 'buy' else '매도' }}</td>
+  <td>{{ '{:,}'.format(o.qty) }}</td><td>{{ o.ref_price | won if o.ref_price else '—' }}</td>
+  <td class="l">{{ {'sent': '접수', 'rejected': '거절', 'filled': '체결'}.get(o.status, o.status) }}</td><td class="l muted">{{ o.reason or '' }}{{ ' · ' ~ o.error if o.error }}</td></tr>{% endfor %}</table></div>
+{% else %}<div class="empty">주문 기록이 없습니다.</div>{% endif %}</div>
+
+<div class="card"><h2>긴급 뉴스 신호 (최근 40건)</h2>
+{% if alerts %}<div class="scroll"><table><tr><th class="l">시각</th><th class="l">종목</th><th>방향</th><th>강도</th><th>기사/언론사</th><th>신호 시 가격</th><th class="l">모드</th></tr>
+{% for a in alerts %}<tr><td class="l">{{ a.alert_at[5:16] | replace('T', ' ') }}</td><td class="l">{{ a.name }} <span class="muted">{{ a.ticker }}</span></td>
+  <td class="{{ 'up' if a.direction > 0 else 'down' }}">{{ '호재' if a.direction > 0 else '악재' }}</td><td>{{ a.strength | num }}</td>
+  <td>{{ a.n_articles }}/{{ a.n_offices }}</td><td>{{ a.entry_price | won if a.entry_price else '—' }}</td><td class="l">{{ a.mode }}</td></tr>{% endfor %}</table></div>
+{% else %}<div class="empty">신호 기록이 없습니다.</div>{% endif %}</div>
+
+{% if p.targets %}<div class="card"><h2>섹터 과열점수 ({{ p.targets.asof }} 종가 기준, 그림자 기록 — 비중에는 미적용)</h2>
+<div class="scroll"><table><tr><th class="l">섹터</th><th>과열점수</th></tr>
+{% for s, h in p.targets.heat.items() %}<tr><td class="l">{{ s }}</td><td class="{{ 'up' if h >= 0.65 }}">{{ h }}</td></tr>{% endfor %}</table></div>
+<p class="muted" style="font-size:15px">0.65 이상 = 과열(빨강). 2021~2026 백테스트에서 과열 축소가 상승장 수익을 크게 깎아 지금은 기록만 합니다.</p></div>{% endif %}
+
+{% if p.risk %}<div class="card"><h2>리스크 이벤트</h2><div class="scroll"><table><tr><th class="l">시각</th><th class="l">종류</th><th class="l">내용</th></tr>
+{% for r in p.risk %}<tr><td class="l">{{ r.ts[5:16] | replace('T', ' ') }}</td><td class="l">{{ r.kind }}</td><td class="l">{{ r.detail }}</td></tr>{% endfor %}</table></div></div>{% endif %}
+{% endblock %}
+{% block script %}
+{% if p.equity and p.equity|length >= 2 %}
+<script>
+const eq = {{ p.equity | tojson }};
+const v0 = eq[0].value, b0 = eq[0].benchmark_close;
+lineChart(document.getElementById('eq'), eq.map(r => r.date), [
+  { label: '모의 계좌', data: eq.map(r => r.value), color: '--accent' },
+  { label: 'KOSPI200', data: eq.map(r => r.benchmark_close / b0 * v0), color: '--muted', dash: [5, 4], width: 1.5 }]);
+</script>
+{% endif %}
+{% endblock %}

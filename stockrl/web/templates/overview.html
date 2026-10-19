@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}전체 현황{% endblock %}
+{% block body %}
+<h1>전체 투자 현황</h1>
+<p class="sub">위는 실제 돈으로 하는 투자, 아래는 모의투자입니다. 한국주식 · 미국주식 · 암호화폐를 합쳐서 봅니다. ({{ p.now }} 기준)</p>
+
+{# ───────────── 실전 투자 ───────────── #}
+<div class="sec"><span class="sec-tag real">실전 투자</span><span class="muted">실제 계좌</span></div>
+<div class="grid">
+  <div class="card kpi"><div class="label">총 평가금액</div><div class="val">{{ real.total | won if real else '—' }}</div>
+    <div class="note">{{ '마지막 기록 ' ~ real.asof if real else '아직 시작 전 (모의투자 검증 후 시작)' }}</div></div>
+  <div class="card kpi"><div class="label">누적 수익률</div><div class="val">{{ real.ret | pct if real else '—' }}</div>
+    <div class="note">시장 지수 대비 {{ real.excess | pct if real else '—' }}</div></div>
+  <div class="card kpi"><div class="label">오늘 손익</div><div class="val">{{ real.day_ret | pct if real else '—' }}</div>
+    <div class="note">—</div></div>
+  <div class="card kpi"><div class="label">운용 중인 시장</div><div class="val">{{ real.markets if real else 0 }}개</div>
+    <div class="note">한국 · 미국 · 암호화폐</div></div>
+</div>
+<div class="card">
+  <h2>실전 자산 추이</h2>
+  {% if real and real.series %}<div class="chart"><canvas id="realchart"></canvas></div>
+  {% else %}
+  <div class="scroll"><table>
+    <tr><th class="l">시장</th><th class="l">계좌</th><th class="l">상태</th><th>평가금액</th><th>수익률</th></tr>
+    {% for k, m in markets.items() %}<tr><td class="l"><a href="/market/{{ k }}">{{ m.name }}</a></td>
+      <td class="l">{{ m.broker | replace(' (모의)', '') | replace(' (예정)', '') }}</td>
+      <td class="l"><span class="badge wait">시작 전</span></td><td>—</td><td>—</td></tr>{% endfor %}
+  </table></div>
+  <p class="muted" style="font-size:15px;margin:12px 0 0">실전 계좌가 시작되면 여기에 시장별 평가금액과 자산 추이 그래프(시장 지수 대비)가 나옵니다.
+  실전 주문은 별도 잠금을 풀어야만 나가도록 막혀 있습니다.</p>
+  {% endif %}
+</div>
+
+{# ───────────── 모의투자 ───────────── #}
+<div class="sec" style="margin-top:34px"><span class="sec-tag paper">모의투자</span><span class="muted">한국투자증권 모의계좌 · 2026-10-19 시작</span>
+  <a href="/paper" style="margin-left:auto;font-size:16px">자세히 보기 →</a></div>
+<div class="grid">
+  <div class="card kpi"><div class="label">평가금액</div>
+    <div class="val">{{ (live.total if live else p.value) | won }}</div>
+    <div class="note">{{ '실시간 ' ~ live.day ~ ' ' ~ live.ts if live else ('마감 기록 ' ~ p.equity[-1].date if p.equity else '첫 기록 전') }}</div></div>
+  <div class="card kpi"><div class="label">누적 수익률 (시작 1억원)</div>
+    {% set cum = ((live.total if live else (p.value or 1e8)) / 1e8 - 1) %}
+    <div class="val {{ 'up' if cum > 0 else 'down' if cum < 0 }}">{{ cum | pct }}</div>
+    <div class="note">KOSPI200 {{ p.bench_ret | pct if p.bench_ret is not none else '—' }} (마감 기록 2일 이상부터)</div></div>
+  <div class="card kpi"><div class="label">오늘 손익</div>
+    <div class="val {{ 'up' if live and live.day_ret > 0 else 'down' if live and live.day_ret < 0 }}">{{ live.day_ret | pct if live else '—' }}</div>
+    <div class="note">KOSPI200 오늘 {{ live.k200_ret | pct if live else '—' }}</div></div>
+  <div class="card kpi"><div class="label">오늘 시장 대비</div>
+    <div class="val">{{ (live.day_ret - live.k200_ret) | pct if live and live.k200_ret is not none else '—' }}</div>
+    <div class="note">보유 {{ live.holdings | length if live else 0 }}종목</div></div>
+</div>
+
+<div class="card">
+  <h2>오늘 장중 (5분마다) <span class="muted" style="font-size:15px;font-weight:400">{{ live.day ~ ' ' ~ live.ts ~ ' 기준' if live else '' }}</span></h2>
+  {% if live and live.series | length >= 2 %}<div class="chart" style="height:300px"><canvas id="livechart2"></canvas></div>
+  {% else %}<div class="empty">장중 기록이 2개 이상 쌓이면 그래프가 나옵니다 (평일 09:00~15:30, 5분마다).</div>{% endif %}
+</div>
+<div class="card">
+  <h2>일별 자산 추이 vs KOSPI200</h2>
+  {% if p.equity and p.equity|length >= 2 %}<div class="chart"><canvas id="eq"></canvas></div>
+  {% else %}<div class="empty">마감 기록이 2일 이상 쌓이면 그래프가 나옵니다 (매일 15:40 기록).</div>{% endif %}
+</div>
+
+<h2 style="margin-top:8px">시장별 모의투자</h2>
+<div class="grid">
+  {% for k, m in markets.items() %}
+  <a class="card" href="/market/{{ k }}" style="color:inherit">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <strong style="font-size:18px">{{ m.name }}</strong>
+      <span class="badge {{ 'live' if k == 'kr' else 'wait' }}">{{ m.status }}</span></div>
+    <div class="muted" style="margin-top:8px;font-size:15px">{{ m.broker }}<br>비교 기준: {{ m.bench }}</div>
+    {% if k == 'kr' %}<div style="margin-top:10px;font-size:22px;font-weight:800">{{ (live.total if live else p.value) | won }}</div>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+<style>
+  .sec { display: flex; align-items: center; gap: 12px; margin: 6px 0 14px; flex-wrap: wrap; }
+  .sec-tag { font-size: 18px; font-weight: 800; padding: 6px 16px; border-radius: 10px; color: #fff; }
+  .sec-tag.real { background: linear-gradient(90deg, #14213d, #2f4b8f); }
+  .sec-tag.paper { background: linear-gradient(90deg, #2f6fed, #5b8cff); }
+</style>
+{% endblock %}
+{% block script %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  {% if live and live.series | length >= 2 %}
+  const s = {{ live.series | tojson }};
+  const lc = lineChart(document.getElementById('livechart2'), s.map(r => r.t), [
+    { label: '모의 계좌 (전일 마감 대비 %)', data: s.map(r => +(r.ret * 100).toFixed(3)), color: '--accent' },
+    { label: 'KOSPI200 (%)', data: s.map(r => r.k == null ? null : +(r.k * 100).toFixed(3)), color: '--muted', dash: [5, 4], width: 1.5 }]);
+  lc.options.scales.y.ticks.callback = v => v + '%'; lc.update();
+  {% endif %}
+  {% if p.equity and p.equity|length >= 2 %}
+  const eq = {{ p.equity | tojson }};
+  const v0 = eq[0].value, b0 = eq[0].benchmark_close;
+  lineChart(document.getElementById('eq'), eq.map(r => r.date), [
+    { label: '모의 계좌', data: eq.map(r => r.value), color: '--accent' },
+    { label: 'KOSPI200', data: eq.map(r => r.benchmark_close / b0 * v0), color: '--muted', dash: [5, 4], width: 1.5 }]);
+  {% endif %}
+  setTimeout(() => location.reload(), 300000);
+});
+</script>
+{% endblock %}

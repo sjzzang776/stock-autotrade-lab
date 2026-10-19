@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}백테스트{% endblock %}
+{% block body %}
+<h1>백테스트</h1>
+<p class="sub">그동안 모은 데이터({{ lo }} ~ {{ hi }}, KOSPI 시총 상위 30종목·해마다 재선정)로 전략을 돌려 봅니다.
+수수료·매도세·슬리피지·정수 주문·가격제한을 학습 환경과 똑같이 넣고, 판단은 그날 종가까지의 정보로, 매매는 다음 날 시가에 합니다.</p>
+
+<div class="card">
+<form id="f" onsubmit="go(event)">
+  <div class="bt" style="display:grid;gap:14px 16px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));align-items:end">
+    <div><label class="lab">전략</label><select name="strategy" id="strategy" onchange="mode()">
+      {% for k, v in strategies.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+    <div><label class="lab">시작일</label><input type="date" name="start" value="2021-01-01" min="{{ lo }}" max="{{ hi }}"></div>
+    <div><label class="lab">종료일</label><input type="date" name="end" value="{{ hi }}" min="{{ lo }}" max="{{ hi }}"></div>
+    <div id="capbox"><label class="lab">종목당 최대 비중</label><input type="number" name="cap" value="0.30" step="0.05" min="0.05" max="1"></div>
+  </div>
+
+  <div id="builder" style="margin-top:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <h2 style="margin:0">매수 조건 <span class="muted" style="font-size:15px;font-weight:400">모두 만족하는 종목만 (AND)</span></h2>
+      <div><label class="lab" style="display:inline;margin-right:6px">예시 불러오기</label>
+        <select id="preset" onchange="preset(this.value)" style="width:auto">
+          <option value="">직접 만들기</option>
+          <option value="rsi">RSI 과매도 반등</option>
+          <option value="golden">골든크로스 + 모멘텀 상위</option>
+          <option value="high">신고가 근처 + 시장 필터</option>
+          <option value="bb">볼린저 하단 매수</option>
+          <option value="lowvol">저변동성 상위 10</option>
+          <option value="macd">MACD 상승 전환 + 거래량</option>
+        </select></div>
+    </div>
+    <div id="conds" style="margin-top:12px"></div>
+    <button type="button" class="ghost" onclick="addCond()">+ 조건 추가</button>
+
+    <h2 style="margin:22px 0 10px">고르기와 비중</h2>
+    <div style="display:grid;gap:14px 16px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));align-items:end">
+      <div><label class="lab">순위 기준 (선택)</label><select id="rank"><option value="">없음 (조건 통과 순서)</option>
+        {% for k, v in indicators.items() %}<option value="{{ k }}">{{ v.name }}</option>{% endfor %}</select></div>
+      <div><label class="lab">순위 지표 기간</label><input id="rank_p" placeholder="기본값"></div>
+      <div><label class="lab">정렬</label><select id="rank_desc"><option value="1">높은 순</option><option value="0">낮은 순</option></select></div>
+      <div><label class="lab">최대 보유 종목 수</label><input id="top" type="number" value="10" min="1" max="30"></div>
+      <div><label class="lab">비중 방식</label><select id="weight"><option value="equal">동일 비중</option><option value="cap">시가총액 비중</option></select></div>
+      <div><label class="lab">리밸런싱 주기</label><select id="freq"><option value="weekly">매주</option><option value="monthly">매월</option><option value="daily">매일</option></select></div>
+      <div><label class="lab">시장 필터: KOSPI200 &gt; n일 이평일 때만</label><input id="mkt_sma" type="number" value="0" min="0" max="300" placeholder="0 = 끔"></div>
+    </div>
+  </div>
+
+  <details style="margin-top:18px"><summary class="muted">섹터 과열 축소 (TDA, 선택)</summary>
+    <div style="display:grid;gap:14px 16px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-top:10px">
+      <div><label class="lab">섹터 과열 축소</label><select name="heat"><option value="false">끔</option><option value="true">켬</option></select></div>
+      <div><label class="lab">과열 기준 (백분위)</label><input type="number" name="threshold" value="0.65" step="0.05" min="0" max="1"></div>
+      <div><label class="lab">최대 축소 비율</label><input type="number" name="max_reduction" value="0.5" step="0.1" min="0" max="1"></div>
+    </div></details>
+  <div style="margin-top:18px"><button id="btn">백테스트 실행</button> <span id="msg" class="muted" style="margin-left:10px"></span></div>
+</form></div>
+
+<div id="out" style="display:none">
+  <div class="grid" id="kpi"></div>
+  <div class="card"><h2>자산 추이 (1억원 시작)</h2><div class="chart"><canvas id="c"></canvas></div></div>
+  <div class="card"><h2>시장 대비 상세</h2><div class="scroll"><table id="rel"></table></div></div>
+</div>
+
+<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+  <h2 style="margin:0">저장된 백테스트 <span class="muted" id="cnt" style="font-size:15px;font-weight:400"></span></h2>
+  <select id="who" onchange="loadSaved()" style="width:auto"><option value="all">전체</option><option value="guest">guest 가 돌린 것만</option><option value="admin">관리자가 돌린 것만</option></select></div>
+<p class="muted" style="font-size:15px;margin-top:-6px">실행할 때마다 자동 저장. <b>★ 우수</b> = 기간 3년 이상 · 정보비율 ≥ 0.3 · 하락장 손실 비율 ≤ 0.9 · MDD ≤ 시장 (RL 합격 기준과 같은 잣대).
+<b>검토</b>를 누르면 해마다 쪼개 다시 돌려 여러 해에 걸쳐 시장을 이기는지 확인하고 적용 가능성을 판정합니다. <b>불러오기</b>로 저장된 설정을 다시 편집할 수 있습니다.</p>
+<div class="scroll"><table id="saved"></table></div>
+<div id="rv" class="card" style="display:none;margin-top:14px"></div></div>
+<style>
+  .lab { font-size: 15px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 6px; }
+  .cond { display: grid; gap: 10px; grid-template-columns: minmax(180px, 2fr) minmax(90px, 1fr) 90px minmax(90px, 1fr) 44px; align-items: center; margin-bottom: 8px; }
+  .cond .unit { grid-column: 1 / -1; font-size: 13.5px; color: var(--muted); margin: -4px 0 6px 2px; }
+  button.ghost { background: transparent; color: var(--accent); border: 1px dashed var(--accent); box-shadow: none; padding: 9px 16px; }
+  button.x { background: transparent; color: var(--muted); border: 1px solid var(--line); box-shadow: none; padding: 8px 0; }
+  @media (max-width: 700px) { .cond { grid-template-columns: 1fr 1fr; } }
+</style>
+{% endblock %}
+{% block script %}
+<script>
+const IND = {{ indicators | tojson }};
+const SNAME = {{ strategies | tojson }};
+const PRESETS = {
+  rsi: { conds: [{ ind: 'rsi', p: '14', op: '<', v: 35 }], rank: 'rsi', rank_p: '14', rank_desc: false, top: 10, weight: 'equal', freq: 'weekly', mkt_sma: 0 },
+  golden: { conds: [{ ind: 'ma_cross', p: '20,60', op: '>', v: 0 }], rank: 'roc', rank_p: '120', rank_desc: true, top: 5, weight: 'equal', freq: 'monthly', mkt_sma: 0 },
+  high: { conds: [{ ind: 'high_dist', p: '252', op: '>', v: -5 }], rank: 'roc', rank_p: '60', rank_desc: true, top: 10, weight: 'cap', freq: 'weekly', mkt_sma: 120 },
+  bb: { conds: [{ ind: 'bb', p: '20', op: '<', v: -0.8 }], rank: 'bb', rank_p: '20', rank_desc: false, top: 8, weight: 'equal', freq: 'weekly', mkt_sma: 0 },
+  lowvol: { conds: [], rank: 'vol', rank_p: '60', rank_desc: false, top: 10, weight: 'equal', freq: 'monthly', mkt_sma: 0 },
+  macd: { conds: [{ ind: 'macd', p: '12,26,9', op: '>', v: 0 }, { ind: 'volume_ratio', p: '20', op: '>', v: 1.2 }], rank: 'macd', rank_p: '12,26,9', rank_desc: true, top: 8, weight: 'equal', freq: 'weekly', mkt_sma: 60 },
+};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function addCond(c = {}) {
+  const box = document.getElementById('conds');
+  if (box.children.length >= 6) return;
+  const ind = c.ind || 'rsi', d = document.createElement('div');
+  d.className = 'cond';
+  d.innerHTML = `<select class="ci" onchange="unit(this)">${Object.entries(IND).map(([k, v]) => `<option value="${k}" ${k === ind ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select>
+    <input class="cp" placeholder="기간" value="${esc(c.p || IND[ind].default)}" title="기간 (쉼표로 여러 개: 20,60)">
+    <select class="co"><option value=">" ${c.op === '>' ? 'selected' : ''}>&gt;</option><option value="<" ${c.op === '<' ? 'selected' : ''}>&lt;</option>
+      <option value=">=" ${c.op === '>=' ? 'selected' : ''}>≥</option><option value="<=" ${c.op === '<=' ? 'selected' : ''}>≤</option></select>
+    <input class="cv" type="number" step="any" placeholder="값" value="${c.v ?? ''}">
+    <button type="button" class="x" onclick="this.parentElement.remove()" title="삭제">✕</button>
+    <div class="unit">${esc(IND[ind].unit)}</div>`;
+  box.appendChild(d);
+}
+function unit(sel) { const d = sel.parentElement; d.querySelector('.unit').textContent = IND[sel.value].unit; d.querySelector('.cp').value = IND[sel.value].default; }
+function preset(k) { if (!k) return; load(PRESETS[k]); }
+function load(r) {
+  document.getElementById('conds').innerHTML = '';
+  (r.conds || []).forEach(addCond);
+  document.getElementById('rank').value = r.rank || '';
+  document.getElementById('rank_p').value = r.rank_p || '';
+  document.getElementById('rank_desc').value = r.rank_desc === false ? '0' : '1';
+  for (const k of ['top', 'weight', 'freq', 'mkt_sma']) if (r[k] != null) document.getElementById(k).value = r[k];
+}
+function rules() {
+  const conds = [...document.querySelectorAll('#conds .cond')].map(d => ({ ind: d.querySelector('.ci').value,
+    p: d.querySelector('.cp').value, op: d.querySelector('.co').value, v: d.querySelector('.cv').value })).filter(c => c.v !== '');
+  return { conds, rank: document.getElementById('rank').value, rank_p: document.getElementById('rank_p').value,
+    rank_desc: document.getElementById('rank_desc').value === '1', top: +document.getElementById('top').value,
+    weight: document.getElementById('weight').value, freq: document.getElementById('freq').value, mkt_sma: +document.getElementById('mkt_sma').value };
+}
+function mode() {
+  const s = document.getElementById('strategy').value;
+  document.getElementById('builder').style.display = s === 'custom' ? '' : 'none';
+  document.getElementById('capbox').style.display = (s === 'custom' || s === 'cap') ? '' : 'none';
+}
+function describe(p) {
+  if (p.strategy !== 'custom') return esc(SNAME[p.strategy] || p.strategy) + (p.strategy === 'cap' ? ` <span class="muted">상한 ${Math.round(p.cap * 100)}%</span>` : '');
+  let r = {}; try { r = JSON.parse(p.rules || '{}'); } catch (e) {}
+  const c = (r.conds || []).map(x => `${IND[x.ind] ? IND[x.ind].name : x.ind}(${x.p}) ${x.op} ${x.v}`).join(' 그리고 ') || '조건 없음';
+  const rk = r.rank ? ` · ${IND[r.rank].name} ${r.rank_desc ? '높은' : '낮은'} 순 상위 ${r.top}` : ` · 최대 ${r.top}종목`;
+  const fq = { daily: '매일', weekly: '매주', monthly: '매월' }[r.freq] || '';
+  return `<b>직접 규칙</b> <span class="muted">${esc(c)}${esc(rk)} · ${fq}${r.mkt_sma ? ' · 시장필터 ' + r.mkt_sma + '일' : ''}${r.weight === 'cap' ? ' · 시총비중' : ''}</span>`;
+}
+
+let chart;
+const pct = v => v == null ? '—' : (v * 100).toFixed(1) + '%';
+const num = v => v == null ? '—' : v.toFixed(2);
+const LABEL = { excess_return: ['시장 대비 초과(총)', pct], alpha: ['알파(연)', pct], beta: ['베타', num],
+  info_ratio: ['정보비율', num], up_capture: ['상승장 포착률', num], down_capture: ['하락장 손실 비율', num],
+  mdd_ratio: ['MDD 비율(시장 대비)', num], bear_defense: ['하락장 방어율', pct],
+  bull_port: ['상승 구간 평균(전략)', pct], bull_mkt: ['상승 구간 평균(시장)', pct],
+  bear_port: ['하락 구간 평균(전략)', pct], bear_mkt: ['하락 구간 평균(시장)', pct] };
+async function go(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn'), msg = document.getElementById('msg');
+  btn.disabled = true; msg.textContent = '계산 중…';
+  const q = new URLSearchParams(new FormData(document.getElementById('f')));
+  if (q.get('strategy') === 'custom') q.set('rules', JSON.stringify(rules()));
+  try {
+    const r = await fetch('/api/backtest?' + q); const d = await r.json();
+    if (!r.ok) throw new Error(d.error || d.detail || r.status);
+    const m = d.metrics, x = d.relative, b = d.bench, bret = b[b.length - 1] / b[0] - 1;
+    document.getElementById('kpi').innerHTML = [
+      ['총수익', pct(m.total_return), 'KOSPI200 ' + pct(bret)], ['연환산(CAGR)', pct(m.cagr), '샤프 ' + num(m.sharpe)],
+      ['최대 낙폭', pct(m.mdd), '변동성 ' + pct(m.vol)], ['시장 대비 초과', pct(x.excess_return), '정보비율 ' + num(x.info_ratio)]
+    ].map(([l, v, n]) => `<div class="card kpi"><div class="label">${l}</div><div class="val">${v}</div><div class="note">${n}</div></div>`).join('');
+    document.getElementById('rel').innerHTML = Object.entries(LABEL).filter(([k]) => k in x)
+      .map(([k, [l, f]]) => `<tr><td class="l">${l}</td><td>${f(x[k])}</td></tr>`).join('');
+    if (chart) chart.destroy();
+    chart = lineChart(document.getElementById('c'), d.dates, [
+      { label: document.getElementById('strategy').selectedOptions[0].text, data: d.values, color: '--accent' },
+      { label: 'KOSPI200', data: d.bench, color: '--muted', dash: [5, 4], width: 1.5 }]);
+    document.getElementById('out').style.display = ''; msg.textContent = '';
+    document.getElementById('out').scrollIntoView({ behavior: 'smooth' });
+  } catch (err) { msg.textContent = '실패: ' + err.message; }
+  btn.disabled = false;
+  loadSaved();
+}
+let SAVED = [];
+async function loadSaved() {
+  const d = await (await fetch('/api/backtests?who=' + document.getElementById('who').value)).json();
+  SAVED = d.rows;
+  document.getElementById('cnt').textContent = `설정 ${d.n_settings}개 · 실행 ${d.n_runs}번`;
+  document.getElementById('saved').innerHTML =
+    '<tr><th class="l"></th><th class="l">실행자</th><th class="l">전략</th><th class="l">기간</th><th>총수익</th><th>시장 대비</th><th>정보비율</th><th>하락장 손실</th><th>MDD</th><th class="l">검토</th><th></th></tr>' +
+    d.rows.map((r, i) => `<tr><td class="l">${r.good ? '★' : ''}</td><td class="l"><span class="badge ${r.user === 'guest' ? 'wait' : ''}">${r.user === 'guest' ? 'guest' : '관리자'}</span></td><td class="l" style="white-space:normal;min-width:260px">${describe(r.params)}</td>
+        <td class="l">${r.params.start} ~ ${r.params.end}</td><td>${pct(r.total_return)}</td><td>${pct(r.excess)}</td><td>${num(r.info_ratio)}</td>
+        <td>${num(r.down_capture)}</td><td>${pct(r.mdd)}</td><td class="l">${r.verdict ? esc(r.verdict) : '—'}</td>
+        <td style="white-space:nowrap"><button class="x" style="padding:5px 10px" onclick="reuse(${i})">불러오기</button>
+          <button style="padding:5px 12px" onclick="review(${r.id}, this)">검토</button></td></tr>`).join('');
+}
+function reuse(i) {
+  const p = SAVED[i].params, f = document.getElementById('f');
+  f.strategy.value = p.strategy; f.start.value = p.start; f.end.value = p.end; f.cap.value = p.cap;
+  f.heat.value = String(p.heat); f.threshold.value = p.threshold; f.max_reduction.value = p.max_reduction;
+  if (p.strategy === 'custom') { try { load(JSON.parse(p.rules)); } catch (e) {} }
+  mode(); window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+async function review(id, b) {
+  b.disabled = true; b.textContent = '검토 중…';
+  const el = document.getElementById('rv');
+  try {
+    const r = await fetch(`/api/backtests/${id}/review`, { method: 'POST' }); const v = await r.json();
+    if (!r.ok) throw new Error(v.detail || r.status);
+    el.innerHTML = `<h2>적용 가능성 검토: <span class="${v.verdict === '적용 후보' ? 'up' : ''}">${esc(v.verdict)}</span> (${v.passed}/${v.total} 통과)</h2>
+      <table>${v.checks.map(c => `<tr><td class="l">${c.ok ? '✅' : '❌'} ${esc(c.name)}</td><td>${esc(c.value)}</td></tr>`).join('')}</table>
+      <h3 style="font-size:17px;margin:16px 0 8px">연도별</h3><div class="scroll"><table><tr><th class="l">연도</th><th>전략</th><th>KOSPI200</th><th>시장 대비</th><th>정보비율</th></tr>
+      ${v.yearly.map(y => `<tr><td class="l">${y.year}</td><td>${pct(y.ret)}</td><td>${pct(y.mkt)}</td><td class="${(y.excess || 0) > 0 ? 'up' : 'down'}">${pct(y.excess)}</td><td>${num(y.info_ratio)}</td></tr>`).join('')}</table></div>
+      ${v.notes.map(n => `<p class="muted" style="font-size:15px">· ${esc(n)}</p>`).join('')}`;
+    el.style.display = '';
+    el.scrollIntoView({ behavior: 'smooth' });
+    loadSaved();
+  } catch (err) { el.innerHTML = '검토 실패: ' + esc(err.message); el.style.display = ''; }
+}
+preset('golden'); document.getElementById('preset').value = 'golden'; mode(); loadSaved();
+</script>
+{% endblock %}

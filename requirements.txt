@@ -1,0 +1,12 @@
+numpy
+pandas
+pyarrow
+pyyaml
+python-dotenv
+scipy
+ripser
+gymnasium
+requests
+fastapi
+uvicorn
+jinja2

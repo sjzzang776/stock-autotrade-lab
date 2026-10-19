@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}투자 현황{% endblock %} · 주식자동매매</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<header><nav class="nav">
+  <span class="brand">주식자동매매</span>
+  <a class="tab {{ 'on' if active == 'overview' }}" href="/">전체 현황</a>
+  {% for k, m in markets.items() %}<a class="tab {{ 'on' if active == k }}" href="/market/{{ k }}">{{ m.name }}</a>{% endfor %}
+  <a class="tab {{ 'on' if active == 'paper' }}" href="/paper">모의투자</a>
+  <a class="tab {{ 'on' if active == 'strategy' }}" href="/strategy">투자 전략</a>
+  <a class="tab {{ 'on' if active == 'backtest' }}" href="/backtest">백테스트</a>
+</nav></header>
+<main>{% block body %}{% endblock %}</main>
+<script>
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+Chart.defaults.font.size = 14; Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+function lineChart(el, labels, sets) {
+  return new Chart(el, { type: 'line',
+    data: { labels, datasets: sets.map(s => ({ label: s.label, data: s.data, borderColor: css(s.color),
+      backgroundColor: css(s.color), borderWidth: s.width || 2.5, pointRadius: 0, tension: 0.1, borderDash: s.dash || [] })) },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: css('--muted'), font: { size: 15 }, boxWidth: 18 } } },
+      scales: { x: { ticks: { color: css('--muted'), maxTicksLimit: 8 }, grid: { color: css('--line') } },
+                y: { ticks: { color: css('--muted') }, grid: { color: css('--line') } } } } });
+}
+</script>
+{% block script %}{% endblock %}
+</body>
+</html>
