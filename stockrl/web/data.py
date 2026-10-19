@@ -44,7 +44,7 @@ def paper():
     """모의투자 전체 현황. 실행(run)마다 run_id 가 새로 생기므로 mode='paper' 인 run 을 전부 합쳐서 본다."""
     out = {"ok": False, "now": datetime.now().strftime("%Y-%m-%d %H:%M"), "equity": [], "value": None, "cash": None,
            "start_value": None, "ret": None, "bench_ret": None, "metrics": {}, "relative": {}, "positions": [],
-           "sleeves": [], "orders": [], "risk": [], "targets": None}
+           "sleeves": [], "orders": [], "risk": [], "targets": None, "fills": [], "realized": [], "pnl": {}}
     con = _ro(JOURNAL)
     if con is None:
         out["msg"] = "매매 저널 DB 가 아직 없습니다"
@@ -81,6 +81,25 @@ def paper():
         od["name"] = od.ticker.map(nm).fillna("")
     out["orders"] = od.to_dict("records")
     out["risk"] = _q(con, "SELECT ts, kind, detail FROM risk_events ORDER BY ts DESC LIMIT 20").to_dict("records")
+    # 매매 기록(체결) + 실현 손익(매도) + 평가 손익(보유)
+    fl = _q(con, """SELECT f.ts, o.ticker, o.side, o.source, f.qty, f.price FROM fills f JOIN orders o ON f.order_id = o.order_id
+                    JOIN runs r ON o.run_id = r.run_id WHERE r.mode = 'paper' ORDER BY f.ts DESC LIMIT 300""")
+    if len(fl):
+        fl["name"] = fl.ticker.map(nm).fillna("")
+        fl["amount"] = fl.qty * fl.price
+    out["fills"] = fl.to_dict("records")
+    rz = _q(con, "SELECT * FROM realized ORDER BY ts DESC")
+    if len(rz):
+        rz["name"] = rz.ticker.map(nm).fillna("")
+    out["realized"] = rz.head(200).to_dict("records")
+    unreal = None
+    if out["positions"]:
+        unreal = float(sum((r["close"] - r["avg_cost"]) * r["qty"] for r in out["positions"] if r.get("avg_cost")))
+    out["pnl"] = {"realized": float(rz.pnl.sum()) if len(rz) else 0.0, "n_sells": int(len(rz)),
+                  "win_rate": float((rz.pnl > 0).mean()) if len(rz) else None,
+                  "avg_pct": float(rz.pnl_pct.mean()) if len(rz) else None, "unrealized": unreal,
+                  "n_buys": int((fl.side == "buy").sum()) if len(fl) else 0,
+                  "bought": float(fl.loc[fl.side == "buy", "amount"].sum()) if len(fl) else 0.0}
     st = _q(con, "SELECT key, value FROM paper_state WHERE key LIKE 'targets_%' ORDER BY key DESC LIMIT 1")
     if len(st):
         t = json.loads(st.value.iloc[0])

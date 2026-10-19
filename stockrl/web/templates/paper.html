@@ -28,6 +28,42 @@
   <td>{{ '{:,}'.format(r.qty) }}</td><td>{{ r.avg_cost | won }}</td><td>{{ r.opened }}</td></tr>{% endfor %}</table></div>
 {% else %}<div class="empty">체결 반영 전입니다 (장 마감 후 동기화).</div>{% endif %}</div>
 
+<div class="card"><h2>매매 기록과 손익</h2>
+  <div class="grid">
+    <div class="kpi"><div class="label">실현 손익 (판 것)</div>
+      <div class="val {{ 'up' if (p.pnl.realized or 0) > 0 else 'down' if (p.pnl.realized or 0) < 0 }}">{{ p.pnl.realized | won if p.pnl else '—' }}</div>
+      <div class="note">매도 {{ p.pnl.n_sells or 0 }}건 · 수수료·매도세 뺀 금액</div></div>
+    <div class="kpi"><div class="label">평가 손익 (들고 있는 것)</div>
+      <div class="val {{ 'up' if (p.pnl.unrealized or 0) > 0 else 'down' if (p.pnl.unrealized or 0) < 0 }}">{{ p.pnl.unrealized | won }}</div>
+      <div class="note">마지막 마감 기록 기준</div></div>
+    <div class="kpi"><div class="label">승률 (매도 건 중 이익)</div>
+      <div class="val">{{ (p.pnl.win_rate * 100) | round(0) | int ~ '%' if p.pnl and p.pnl.win_rate is not none else '—' }}</div>
+      <div class="note">건당 평균 {{ p.pnl.avg_pct | pct if p.pnl and p.pnl.avg_pct is not none else '—' }}</div></div>
+    <div class="kpi"><div class="label">매수 체결</div><div class="val">{{ p.pnl.n_buys or 0 }}건</div>
+      <div class="note">누적 매수 {{ p.pnl.bought | won if p.pnl else '—' }}</div></div>
+  </div>
+
+  <h3 style="font-size:17px;margin:20px 0 8px">실현 손익 (매도할 때마다)</h3>
+  {% if p.realized %}<div class="scroll"><table>
+    <tr><th class="l">매도일</th><th class="l">몫</th><th class="l">종목</th><th>수량</th><th>매수 평균가</th><th>매도가</th><th class="l">보유 시작</th><th>손익(비용 뺀)</th><th>수익률</th></tr>
+    {% for r in p.realized %}<tr><td class="l">{{ r.ts[:16] | replace('T', ' ') }}</td><td class="l">{{ '장기' if r.sleeve == 'core' else '긴급' }}</td>
+      <td class="l">{{ r.name }} <span class="muted">{{ r.ticker }}</span></td><td>{{ '{:,}'.format(r.qty) }}</td><td>{{ r.avg_cost | won }}</td>
+      <td>{{ r.sell_price | won }}</td><td class="l">{{ r.held_since or '' }}</td>
+      <td class="{{ 'up' if r.pnl > 0 else 'down' if r.pnl < 0 }}">{{ r.pnl | won }}</td>
+      <td class="{{ 'up' if r.pnl > 0 else 'down' if r.pnl < 0 }}">{{ r.pnl_pct | pct }}</td></tr>{% endfor %}</table></div>
+  {% else %}<div class="empty">아직 판 종목이 없습니다. 긴급 몫은 사고 3거래일 뒤 자동으로 팔고, 장기몫은 비중이 바뀔 때 팝니다. 팔면 여기에 차익이 나옵니다.</div>{% endif %}
+
+  <h3 style="font-size:17px;margin:20px 0 8px">체결 내역 (최근 300건)</h3>
+  {% if p.fills %}<div class="scroll"><table>
+    <tr><th class="l">체결 시각</th><th class="l">몫</th><th class="l">종목</th><th>구분</th><th>수량</th><th>체결가</th><th>금액</th></tr>
+    {% for f in p.fills %}<tr><td class="l">{{ f.ts[:16] | replace('T', ' ') }}</td><td class="l">{{ '장기' if f.source == 'core' else '긴급' if f.source == 'alert' else f.source }}</td>
+      <td class="l">{{ f.name }} <span class="muted">{{ f.ticker }}</span></td>
+      <td class="{{ 'up' if f.side == 'buy' else 'down' }}">{{ '매수' if f.side == 'buy' else '매도' }}</td>
+      <td>{{ '{:,}'.format(f.qty) }}</td><td>{{ f.price | won }}</td><td>{{ f.amount | won }}</td></tr>{% endfor %}</table></div>
+  <p class="muted" style="font-size:14px">체결가는 장 마감 후 계좌와 맞춰 반영합니다(모의투자는 체결 조회가 안 돼 계좌 평균단가 기준).</p>
+  {% else %}<div class="empty">체결 내역이 없습니다.</div>{% endif %}
+</div>
+
 <div class="card"><h2>주문 기록 (최근 120건)</h2>
 {% if p.orders %}<div class="scroll"><table><tr><th class="l">시각</th><th class="l">몫</th><th class="l">종목</th><th>구분</th><th>수량</th><th>기준가</th><th class="l">상태</th><th class="l">사유</th></tr>
 {% for o in p.orders %}<tr><td class="l">{{ o.ts[5:16] | replace('T', ' ') }}</td><td class="l">{{ '장기' if o.source == 'core' else '긴급' if o.source == 'alert' else o.source }}</td>
