@@ -201,10 +201,12 @@ def _months(n):
     return sorted(out)
 
 
-def _days_this_month():
-    t, d = date.today(), date.today().replace(day=1)
+def _days_this_month(min_back=3):
+    """이번 달 1일 ~ 어제 (+ 월초에도 최근 min_back 일은 포함). 아카이브는 하루 늦게 올라옴"""
+    t = date.today()
+    d = min(t.replace(day=1), t - timedelta(days=min_back))
     out = []
-    while d < t - timedelta(days=1):      # 어제까지 (아카이브는 하루 늦게 올라옴)
+    while d < t:
         out.append(d.isoformat())
         d += timedelta(days=1)
     return out

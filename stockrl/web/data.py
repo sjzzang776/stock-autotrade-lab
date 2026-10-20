@@ -182,11 +182,18 @@ def kr_status():
     return out
 
 
+GLOB_STATUS_FILE = DB_DIR.parent / "glob_status.json"   # 수집 서버(gcp-free)가 10분마다 보내 주는 요약
+
+
 def glob_status(market):
-    """미국·암호화폐 수집 현황 (stockrl.glob.collect → global.db)"""
+    """미국·암호화폐 수집 현황 (stockrl.glob.collect → global.db). 2026-10-20 서버 분리 후 웹 서버(gcp-main)엔
+    global.db 가 없으므로, 수집 서버가 보내 준 요약 파일(glob_status.json)을 읽는다"""
     con = _ro(DB_DIR / "global.db")
     if con is None:
-        return None
+        try:
+            return json.loads(GLOB_STATUS_FILE.read_text(encoding="utf-8")).get(market)
+        except Exception:
+            return None
     try:
         st = {k: (json.loads(v), u) for k, v, u in con.execute("SELECT key, value, updated FROM stats")}
     except Exception:
