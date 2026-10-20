@@ -85,3 +85,14 @@ button:disabled { opacity: .5; cursor: wait; }
   .card { padding: 16px; }
   table { font-size: 15px; }
 }
+
+/* 페이지 안 바로가기 줄 (소제목 자동 수집, 2026-10-20) */
+.toc { position: sticky; top: 56px; z-index: 4; background: var(--bg); border-bottom: 1px solid var(--line); }
+.toc-in { max-width: 1280px; margin: 0 auto; padding: 10px 20px; display: flex; gap: 8px; overflow-x: auto; white-space: nowrap; }
+.toc a { font-size: 15px; padding: 6px 13px; border-radius: 99px; border: 1px solid var(--line); background: var(--card);
+         color: var(--ink); text-decoration: none; }
+.toc a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+.toc a.major { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+main .card, main .sec, main h2 { scroll-margin-top: 120px; }
+html { scroll-behavior: smooth; }
+@media (max-width: 600px) { .toc { top: 52px; } .toc a { font-size: 14px; padding: 5px 11px; } }

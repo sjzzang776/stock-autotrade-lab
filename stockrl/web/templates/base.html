@@ -17,7 +17,27 @@
   <a class="tab {{ 'on' if active == 'strategy' }}" href="/strategy">투자 전략</a>
   <a class="tab {{ 'on' if active == 'backtest' }}" href="/backtest">백테스트</a>
 </nav></header>
+<nav class="toc" id="toc" hidden></nav>
 <main>{% block body %}{% endblock %}</main>
+<script>
+// 페이지 안 소제목(카드의 h2·구역 이름표)으로 바로가기 줄을 자동으로 만듦 (2026-10-20 사용자 요청)
+document.addEventListener('DOMContentLoaded', () => {
+  const heads = [...document.querySelectorAll('main .sec-tag, main .card > h2, main .card > div > h2, main > h2')]
+    .filter(h => h.textContent.trim() && h.offsetParent !== null);
+  if (heads.length < 3) return;
+  const toc = document.getElementById('toc');
+  const used = new Set();
+  toc.innerHTML = '<div class="toc-in">' + heads.map((h, i) => {
+    const label = (h.childNodes[0] ? h.childNodes[0].textContent : h.textContent).trim().replace(/\s+/g, ' ').slice(0, 24);
+    if (!label || used.has(label)) return '';
+    used.add(label);
+    const target = h.closest('.card') && !h.classList.contains('sec-tag') ? h.closest('.card') : h;
+    target.id = target.id || 'sec-' + i;
+    return `<a href="#${target.id}" class="${h.classList.contains('sec-tag') ? 'major' : ''}">${label}</a>`;
+  }).join('') + '</div>';
+  toc.hidden = false;
+});
+</script>
 <script>
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 Chart.defaults.font.size = 14; Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
